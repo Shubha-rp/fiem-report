@@ -24,17 +24,20 @@ export default function DynamicTable({
   onEditCellChange,
   onSaveRow,
   onCancelRow,
+  userRole,
 }) {
+  const isUser2 = userRole === 'user2'
+
   const totalWidth =
     CHECKBOX_COL_WIDTH +
     FIXED_COLUMNS.reduce((s, c) => s + c.width, 0) +
     dateColumns.length * DATE_COL_WIDTH +
     STATUS_COL_WIDTH
 
-  const pendingRowIds = rows
-    .filter((r) => r.status === '' && r.approve === '' && !editingRowIds.has(r.id))
-    .map((r) => r.id)
-  const allPendingSelected = pendingRowIds.length > 0 && pendingRowIds.every((id) => selectedRowIds.has(id))
+  // All rows are selectable for both users
+  // (page already pre-filters rows to only show what that user should see)
+  const selectableIds = rows.filter(r => !editingRowIds.has(r.id)).map(r => r.id)
+  const allSelected = selectableIds.length > 0 && selectableIds.every(id => selectedRowIds.has(id))
 
   if (!rows.length) {
     return (
@@ -66,25 +69,21 @@ export default function DynamicTable({
             <th className="text-center border-b border-r border-[#e5e5e5] py-3.5">
               <input
                 type="checkbox"
-                checked={allPendingSelected}
-                disabled={pendingRowIds.length === 0}
-                onChange={() => onToggleAll(pendingRowIds, allPendingSelected)}
+                checked={allSelected}
+                disabled={selectableIds.length === 0}
+                onChange={onToggleAll}
                 className="w-4 h-4 accent-[#0a6ed1] cursor-pointer disabled:cursor-not-allowed disabled:opacity-30"
               />
             </th>
             {FIXED_COLUMNS.map((c) => (
-              <th
-                key={c.key}
-                className="text-left font-semibold py-3.5 px-3 text-[11px] uppercase tracking-wider border-b border-r border-[#e5e5e5] whitespace-nowrap"
-              >
+              <th key={c.key}
+                className="text-left font-semibold py-3.5 px-3 text-[11px] uppercase tracking-wider border-b border-r border-[#e5e5e5] whitespace-nowrap">
                 {c.label}
               </th>
             ))}
             {dateColumns.map((c) => (
-              <th
-                key={c.key}
-                className="text-right font-semibold py-3.5 px-3 text-[11px] border-b border-r border-[#e5e5e5] whitespace-nowrap"
-              >
+              <th key={c.key}
+                className="text-right font-semibold py-3.5 px-3 text-[11px] border-b border-r border-[#e5e5e5] whitespace-nowrap">
                 {c.label}
               </th>
             ))}
@@ -96,28 +95,35 @@ export default function DynamicTable({
 
         <tbody>
           {rows.map((row) => {
-            const isPending = row.status === '' && row.approve === ''
             const isChecked = selectedRowIds.has(row.id)
             const isEditing = editingRowIds.has(row.id)
+            // Row can be selected if not currently being edited
+            const isSelectable = !isEditing
 
             return (
               <tr
                 key={row.id}
-                onClick={() => !isEditing && onToggleRow(row.id, isPending)}
-                className={`border-b border-[#f0f0f0] last:border-b-0 transition-colors duration-100 ${
-                  isPending && !isEditing ? 'cursor-pointer' : 'cursor-default'
-                } ${isEditing ? 'bg-[#fffbf5]' : isChecked ? 'bg-[#ebf5ff]' : 'hover:bg-[#fafbfc]'}`}
+                onClick={() => isSelectable && onToggleRow(row.id)}
+                className={`border-b border-[#f0f0f0] last:border-b-0 transition-colors duration-100 ${isEditing
+                    ? 'bg-[#fffbf5] cursor-default'
+                    : isChecked
+                      ? 'bg-[#ebf5ff] cursor-pointer'
+                      : 'hover:bg-[#fafbfc] cursor-pointer'
+                  }`}
               >
+                {/* Checkbox */}
                 <td className="py-3 px-3 border-r border-[#f0f0f0] text-center">
                   <input
                     type="checkbox"
                     checked={isChecked}
-                    disabled={!isPending || isEditing}
-                    onChange={() => onToggleRow(row.id, isPending)}
+                    disabled={!isSelectable}
+                    onChange={() => onToggleRow(row.id)}
                     onClick={(e) => e.stopPropagation()}
                     className="w-4 h-4 accent-[#0a6ed1] cursor-pointer disabled:cursor-not-allowed disabled:opacity-30"
                   />
                 </td>
+
+                {/* Fixed columns — key fields (so, li, sap) are always read-only */}
                 <td className="py-3 px-3 border-r border-[#f0f0f0] font-medium text-[#32363a]">{row.so}</td>
                 <td className="py-3 px-3 border-r border-[#f0f0f0] text-[#32363a]">{row.li}</td>
                 <td className="py-3 px-3 border-r border-[#f0f0f0] text-[#32363a]">{row.sap}</td>
@@ -125,17 +131,18 @@ export default function DynamicTable({
                 <td className="py-3 px-3 border-r border-[#f0f0f0] text-[#32363a]">{row.plt}</td>
                 <td className="py-3 px-3 border-r border-[#f0f0f0] text-[#32363a]">{row.cp}</td>
 
+                {/* Dynamic date columns — editable only for User 2 in edit mode */}
                 {dateColumns.map((c) => {
                   const cellVal = isEditing
                     ? (editValues[row.id]?.[c.key] ?? '')
-                    : row.values[c.key]
+                    : (row.values[c.key] ?? '')
+
+                  const showInput = isEditing && isUser2
 
                   return (
-                    <td
-                      key={c.key}
-                      className="py-3 px-3 border-r border-[#f0f0f0] text-right tabular-nums text-[#32363a]"
-                    >
-                      {isEditing ? (
+                    <td key={c.key}
+                      className="py-3 px-3 border-r border-[#f0f0f0] text-right tabular-nums text-[#32363a]">
+                      {showInput ? (
                         <input
                           type="number"
                           min="0"
@@ -153,8 +160,9 @@ export default function DynamicTable({
                   )
                 })}
 
+                {/* Status / Save-Cancel column */}
                 <td className="py-3 px-3">
-                  {isEditing ? (
+                  {isEditing && isUser2 ? (
                     <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => onSaveRow(row.id)}
@@ -170,7 +178,7 @@ export default function DynamicTable({
                       </button>
                     </div>
                   ) : (
-                    <StatusBadge status={row.status} />
+                    <StatusBadge status={row.approve === 'R' ? 'R' : row.status} />
                   )}
                 </td>
               </tr>

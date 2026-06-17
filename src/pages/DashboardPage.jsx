@@ -1,45 +1,57 @@
-import { useState } from 'react'
-import FilterBar from '@/components/FilterBar'
+import { useState, useMemo } from 'react'
+import FilterBar    from '@/components/FilterBar'
 import DynamicTable from '@/components/DynamicTable'
-import { fetchDashboard, postRowAction } from '@/lib/dashboardApi'
+import { fetchDashboard, postBulkAction } from '@/lib/dashboardApi'
+
+const filterForRole = (rows, role) => {
+    if (role === 'user1') return rows.filter(r => r.status === '' && r.approve === '')
+    if (role === 'user2') return rows.filter(r => r.status === '' && r.approve === 'R')
+    return []
+}
 
 export default function DashboardPage() {
-    const [customerCode, setCustomerCode] = useState('')
+    const [userRole, setUserRole] = useState('user1')
+
+    const [customerCode,        setCustomerCode]        = useState('')
     const [materialDescription, setMaterialDescription] = useState('')
 
     const [dateColumns, setDateColumns] = useState([])
-    const [rows, setRows] = useState([])
+    const [allRows,     setAllRows]     = useState([])
 
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState(null)
+    const [loading,     setLoading]     = useState(false)
+    const [error,       setError]       = useState(null)
     const [hasSearched, setHasSearched] = useState(false)
 
     const [selectedRowIds, setSelectedRowIds] = useState(new Set())
-    const [isActing, setIsActing] = useState(false)
+
+    const [isActing,      setIsActing]      = useState(false)
     const [pendingAction, setPendingAction] = useState(null)
-    const [actionError, setActionError] = useState(null)
+    const [actionError,   setActionError]   = useState(null)
+    const [actionSuccess, setActionSuccess] = useState(null)
 
     const [editingRowIds, setEditingRowIds] = useState(new Set())
-    const [editValues, setEditValues] = useState({})
+    const [editValues,    setEditValues]    = useState({})
+
+    const rows = useMemo(() => filterForRole(allRows, userRole), [allRows, userRole])
 
     const selectedCount = selectedRowIds.size
-    const canAct = selectedCount > 0 && !isActing && editingRowIds.size === 0
-    const canEdit = selectedCount > 0 && !isActing && editingRowIds.size === 0
+    const canAct        = selectedCount > 0 && !isActing
 
     const handleGo = async () => {
         setLoading(true)
         setError(null)
-        setSelectedRowIds(new Set())
         setActionError(null)
+        setActionSuccess(null)
+        setSelectedRowIds(new Set())
         setEditingRowIds(new Set())
         setEditValues({})
         try {
             const data = await fetchDashboard({ customerCode, materialDescription })
             setDateColumns(data.dateColumns)
-            setRows(data.rows)
+            setAllRows(data.rows)
             setHasSearched(true)
         } catch (err) {
-            setError(err.message || 'Failed to fetch dashboard data')
+            setError(err.message || 'Failed to fetch data')
         } finally {
             setLoading(false)
         }
@@ -49,44 +61,50 @@ export default function DashboardPage() {
         setCustomerCode('')
         setMaterialDescription('')
         setDateColumns([])
-        setRows([])
+        setAllRows([])
         setHasSearched(false)
         setError(null)
         setSelectedRowIds(new Set())
         setActionError(null)
+        setActionSuccess(null)
         setEditingRowIds(new Set())
         setEditValues({})
     }
 
-    const handleToggleRow = (rowId, isPending) => {
-        if (!isPending) return
+    const handleToggleRow = (rowId) => {
         setActionError(null)
-        setSelectedRowIds((current) => {
-            const next = new Set(current)
-            if (next.has(rowId)) next.delete(rowId)
-            else next.add(rowId)
+        setActionSuccess(null)
+        setSelectedRowIds((prev) => {
+            const next = new Set(prev)
+            next.has(rowId) ? next.delete(rowId) : next.add(rowId)
             return next
         })
     }
 
-    const handleToggleAll = (pendingRowIds, allSelected) => {
+    const handleToggleAll = () => {
         setActionError(null)
-        setSelectedRowIds(allSelected ? new Set() : new Set(pendingRowIds))
+        setActionSuccess(null)
+        const selectableIds = rows.filter(r => !editingRowIds.has(r.id)).map(r => r.id)
+        const allSelected   = selectableIds.every(id => selectedRowIds.has(id))
+        setSelectedRowIds(allSelected ? new Set() : new Set(selectableIds))
     }
 
     const handleEdit = () => {
         const newEditingIds = new Set(editingRowIds)
         const newEditValues = { ...editValues }
         rows.forEach((r) => {
-            if (selectedRowIds.has(r.id) && r.status === '' && r.approve === '') {
+            if (selectedRowIds.has(r.id)) {
                 newEditingIds.add(r.id)
-                if (!newEditValues[r.id]) {
-                    newEditValues[r.id] = { ...r.values }
-                }
+                if (!newEditValues[r.id]) newEditValues[r.id] = { ...r.values }
             }
         })
         setEditingRowIds(newEditingIds)
         setEditValues(newEditValues)
+        setSelectedRowIds((prev) => {
+            const next = new Set(prev)
+            rows.forEach(r => { if (selectedRowIds.has(r.id)) next.delete(r.id) })
+            return next
+        })
     }
 
     const handleEditCellChange = (rowId, colKey, value) => {
@@ -96,91 +114,67 @@ export default function DashboardPage() {
         }))
     }
 
+    // Commits edits locally into allRows (both values + dateLines), exits edit mode, re-selects row
     const handleSaveRow = (rowId) => {
-        setRows((current) =>
-            current.map((r) =>
-                r.id === rowId ? { ...r, values: { ...r.values, ...editValues[rowId] } } : r,
-            ),
+        const edits = editValues[rowId] ?? {}
+        setAllRows((current) =>
+            current.map((r) => {
+                if (r.id !== rowId) return r
+                // Update values (display)
+                const newValues = { ...r.values, ...edits }
+                // Update dateLines (used by postBulkAction for Wmeng)
+                const newDateLines = { ...r.dateLines }
+                Object.entries(edits).forEach(([dateKey, val]) => {
+                    if (newDateLines[dateKey]) {
+                        newDateLines[dateKey] = { ...newDateLines[dateKey], wmeng: String(val) }
+                    }
+                })
+                return { ...r, values: newValues, dateLines: newDateLines }
+            })
         )
-        setEditingRowIds((prev) => {
-            const next = new Set(prev)
-            next.delete(rowId)
-            return next
-        })
-        setEditValues((prev) => {
-            const next = { ...prev }
-            delete next[rowId]
-            return next
-        })
+        setEditingRowIds((prev) => { const next = new Set(prev); next.delete(rowId); return next })
+        setSelectedRowIds((prev) => new Set([...prev, rowId]))
+        // Keep editValues — cleared after POST
     }
 
     const handleCancelRow = (rowId) => {
-        setEditingRowIds((prev) => {
-            const next = new Set(prev)
-            next.delete(rowId)
-            return next
-        })
-        setEditValues((prev) => {
-            const next = { ...prev }
-            delete next[rowId]
-            return next
-        })
+        setEditingRowIds((prev) => { const next = new Set(prev); next.delete(rowId); return next })
+        setEditValues((prev) => { const next = { ...prev }; delete next[rowId]; return next })
     }
 
     const handleBulkAction = async (action) => {
-        const targetRows = rows.filter((r) => selectedRowIds.has(r.id) && r.status === '' && r.approve === '')
+        const targetRows = rows.filter(r => selectedRowIds.has(r.id))
         if (!targetRows.length) return
 
+        const stillEditing = targetRows.some(r => editingRowIds.has(r.id))
+        if (stillEditing) {
+            setActionError('Save or cancel open edits before approving.')
+            return
+        }
+
         setActionError(null)
+        setActionSuccess(null)
         setIsActing(true)
         setPendingAction(action)
 
-        const results = await Promise.allSettled(
-            targetRows.map((row) => postRowAction({
-                rowId: row.id,
-                action,
-                kunnr: row.kunnr,
-                vbeln: row.so,
-                posnr: row.li,
-                matnr: row.sap,
-                edatu: row.edatu ?? '',
-            })),
-        )
+        try {
+            await postBulkAction({ rows: targetRows, action, editValues })
 
-        const updatesById = {}
-        let failureCount = 0
+            const actedIds = new Set(targetRows.map(r => r.id))
+            setAllRows(prev => prev.filter(r => !actedIds.has(r.id)))
+            setSelectedRowIds(prev => { const n = new Set(prev); actedIds.forEach(id => n.delete(id)); return n })
+            setEditValues(prev => { const n = { ...prev }; actedIds.forEach(id => delete n[id]); return n })
+            setEditingRowIds(prev => { const n = new Set(prev); actedIds.forEach(id => n.delete(id)); return n })
 
-        results.forEach((result, idx) => {
-            const rowId = targetRows[idx].id
-            if (result.status === 'fulfilled') {
-                updatesById[rowId] = {
-                    approve: result.value.approve,
-                    status: result.value.status,
-                }
-            } else {
-                failureCount += 1
-                console.error('[handleBulkAction] row failed:', targetRows[idx].id, result.reason)
-            }
-        })
-
-        if (Object.keys(updatesById).length) {
-            setRows((current) => current.filter((r) => !updatesById[r.id]))
-        }
-
-        setSelectedRowIds((current) => {
-            const next = new Set(current)
-            Object.keys(updatesById).forEach((id) => next.delete(id))
-            return next
-        })
-
-        if (failureCount) {
-            setActionError(
-                `${failureCount} row${failureCount > 1 ? 's' : ''} failed to update — still selected, try again.`,
+            setActionSuccess(
+                `${targetRows.length} row${targetRows.length > 1 ? 's' : ''} ${action === 'A' ? 'approved' : 'rejected'} successfully.`
             )
+        } catch (err) {
+            setActionError(err.message || 'Action failed — please try again.')
+        } finally {
+            setIsActing(false)
+            setPendingAction(null)
         }
-
-        setIsActing(false)
-        setPendingAction(null)
     }
 
     return (
@@ -193,16 +187,31 @@ export default function DashboardPage() {
                 onGo={handleGo}
                 onClear={handleClear}
                 loading={loading}
+
+                userRole={userRole}
+                onRoleChange={(role) => {
+                    setUserRole(role)
+                    setSelectedRowIds(new Set())
+                    setEditingRowIds(new Set())
+                    setEditValues({})
+                    setActionError(null)
+                    setActionSuccess(null)
+                }}
+
                 selectedCount={selectedCount}
                 canAct={canAct}
                 isActing={isActing}
                 pendingAction={pendingAction}
-                onApprove={() => handleBulkAction('approve')}
-                onReject={() => handleBulkAction('reject')}
-                actionError={actionError}
-                canEdit={canEdit}
-                onEdit={handleEdit}
+
+                onApprove={userRole      === 'user1' ? () => handleBulkAction('A') : undefined}
+                onReject={userRole       === 'user1' ? () => handleBulkAction('R') : undefined}
+
+                onEdit={userRole         === 'user2' ? handleEdit                  : undefined}
+                onApproveUser2={userRole === 'user2' ? () => handleBulkAction('A') : undefined}
                 editingCount={editingRowIds.size}
+
+                actionError={actionError}
+                actionSuccess={actionSuccess}
             />
 
             <div className="flex-1 flex flex-col overflow-hidden px-4 sm:px-6 lg:px-10 pt-3 pb-6 min-h-0">
@@ -210,9 +219,7 @@ export default function DashboardPage() {
                     <div className="flex-1 flex items-center justify-center text-center text-[#6a6d70]">
                         <div>
                             <div className="text-[15px] font-semibold mb-1">No data loaded</div>
-                            <div className="text-[13px]">
-                                Enter a customer code and click <strong>Go</strong>
-                            </div>
+                            <div className="text-[13px]">Enter a customer code and click <strong>Go</strong></div>
                         </div>
                     </div>
                 ) : loading ? (
@@ -225,10 +232,7 @@ export default function DashboardPage() {
                         <div className="px-4 py-3 bg-[#fce8e6] text-[#cc1c14] rounded-lg text-[13px]">{error}</div>
                     </div>
                 ) : (
-                    <div
-                        className="rounded-xl border border-[#e5e5e5] shadow-sm overflow-hidden flex flex-col flex-1"
-                        style={{ minHeight: 0 }}
-                    >
+                    <div className="rounded-xl border border-[#e5e5e5] shadow-sm overflow-hidden flex flex-col flex-1" style={{ minHeight: 0 }}>
                         <DynamicTable
                             dateColumns={dateColumns}
                             rows={rows}
@@ -240,6 +244,7 @@ export default function DashboardPage() {
                             onEditCellChange={handleEditCellChange}
                             onSaveRow={handleSaveRow}
                             onCancelRow={handleCancelRow}
+                            userRole={userRole}
                         />
                     </div>
                 )}
