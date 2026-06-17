@@ -2,9 +2,16 @@ const SRV = '/sap/opu/odata/SAP/ZSALES_SCHEDULE_SRV'
 
 function parseSapDate(dateStr) {
     if (!dateStr) return null
-    const match = dateStr.match(/\/Date\((\d+)\)\//)
-    if (!match) return null
-    return new Date(parseInt(match[1]))
+    const yyyymmdd = dateStr.match(/^(\d{4})(\d{2})(\d{2})$/)
+    if (yyyymmdd) {
+        const [, year, month, day] = yyyymmdd
+        if (dateStr === '00000000') return null
+        return new Date(Number(year), Number(month) - 1, Number(day))
+    }
+    const epochMatch = dateStr.match(/\/Date\((\d+)\)\//)
+    if (epochMatch) return new Date(parseInt(epochMatch[1]))
+
+    return null
 }
 
 function formatDateLabel(date) {
