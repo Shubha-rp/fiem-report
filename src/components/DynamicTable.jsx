@@ -31,9 +31,8 @@ export default function DynamicTable({
     dateColumns.length * DATE_COL_WIDTH +
     STATUS_COL_WIDTH
 
-  // Exclude rows currently in edit mode from "select all" and checkbox availability
   const pendingRowIds = rows
-    .filter((r) => r.status === 'Pending' && !editingRowIds.has(r.id))
+    .filter((r) => r.status === '' && r.approve === '' && !editingRowIds.has(r.id))
     .map((r) => r.id)
   const allPendingSelected = pendingRowIds.length > 0 && pendingRowIds.every((id) => selectedRowIds.has(id))
 
@@ -97,7 +96,7 @@ export default function DynamicTable({
 
         <tbody>
           {rows.map((row) => {
-            const isPending = row.status === 'Pending'
+            const isPending = row.status === '' && row.approve === ''
             const isChecked = selectedRowIds.has(row.id)
             const isEditing = editingRowIds.has(row.id)
 

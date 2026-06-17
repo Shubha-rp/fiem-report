@@ -19,7 +19,6 @@ export default function DashboardPage() {
     const [pendingAction, setPendingAction] = useState(null)
     const [actionError, setActionError] = useState(null)
 
-    // Edit state
     const [editingRowIds, setEditingRowIds] = useState(new Set())
     const [editValues, setEditValues] = useState({})
 
@@ -79,7 +78,7 @@ export default function DashboardPage() {
         const newEditingIds = new Set(editingRowIds)
         const newEditValues = { ...editValues }
         rows.forEach((r) => {
-            if (selectedRowIds.has(r.id) && r.status === 'Pending') {
+            if (selectedRowIds.has(r.id) && r.status === '' && r.approve === '') {
                 newEditingIds.add(r.id)
                 if (!newEditValues[r.id]) {
                     newEditValues[r.id] = { ...r.values }
@@ -144,7 +143,7 @@ export default function DashboardPage() {
                 vbeln: row.so,
                 posnr: row.li,
                 matnr: row.sap,
-                edatu: row.edatu ?? '',   // pass raw edatu stored on row
+                edatu: row.edatu ?? '',
             })),
         )
 
@@ -185,72 +184,66 @@ export default function DashboardPage() {
     }
 
     return (
-        <div className="min-h-screen bg-[#f5f6f7] flex flex-col">
-            <header className="bg-white border-b border-[#e5e5e5] px-4 sm:px-6 lg:px-10 py-4">
-                <h1 className="text-[18px] font-bold text-[#32363a]">Customer Schedule Dashboard</h1>
-            </header>
+        <main className="flex flex-col bg-white flex-1">
+            <FilterBar
+                customerCode={customerCode}
+                onCustomerCodeChange={setCustomerCode}
+                materialDescription={materialDescription}
+                onMaterialDescriptionChange={setMaterialDescription}
+                onGo={handleGo}
+                onClear={handleClear}
+                loading={loading}
+                selectedCount={selectedCount}
+                canAct={canAct}
+                isActing={isActing}
+                pendingAction={pendingAction}
+                onApprove={() => handleBulkAction('approve')}
+                onReject={() => handleBulkAction('reject')}
+                actionError={actionError}
+                canEdit={canEdit}
+                onEdit={handleEdit}
+                editingCount={editingRowIds.size}
+            />
 
-            <main className="flex flex-col bg-white flex-1">
-                <FilterBar
-                    customerCode={customerCode}
-                    onCustomerCodeChange={setCustomerCode}
-                    materialDescription={materialDescription}
-                    onMaterialDescriptionChange={setMaterialDescription}
-                    onGo={handleGo}
-                    onClear={handleClear}
-                    loading={loading}
-                    selectedCount={selectedCount}
-                    canAct={canAct}
-                    isActing={isActing}
-                    pendingAction={pendingAction}
-                    onApprove={() => handleBulkAction('approve')}
-                    onReject={() => handleBulkAction('reject')}
-                    actionError={actionError}
-                    canEdit={canEdit}
-                    onEdit={handleEdit}
-                    editingCount={editingRowIds.size}
-                />
-
-                <div className="flex-1 flex flex-col overflow-hidden px-4 sm:px-6 lg:px-10 pt-3 pb-6 min-h-0">
-                    {!hasSearched && !loading ? (
-                        <div className="flex-1 flex items-center justify-center text-center text-[#6a6d70]">
-                            <div>
-                                <div className="text-[15px] font-semibold mb-1">No data loaded</div>
-                                <div className="text-[13px]">
-                                    Enter a customer code and click <strong>Go</strong>
-                                </div>
+            <div className="flex-1 flex flex-col overflow-hidden px-4 sm:px-6 lg:px-10 pt-3 pb-6 min-h-0">
+                {!hasSearched && !loading ? (
+                    <div className="flex-1 flex items-center justify-center text-center text-[#6a6d70]">
+                        <div>
+                            <div className="text-[15px] font-semibold mb-1">No data loaded</div>
+                            <div className="text-[13px]">
+                                Enter a customer code and click <strong>Go</strong>
                             </div>
                         </div>
-                    ) : loading ? (
-                        <div className="flex-1 flex items-center justify-center gap-3 text-[#6a6d70]">
-                            <div className="w-8 h-8 border-2 border-[#e5e5e5] border-t-[#0a6ed1] rounded-full animate-spin" />
-                            <span className="text-[14px]">Fetching data…</span>
-                        </div>
-                    ) : error ? (
-                        <div className="flex-1 flex items-center justify-center">
-                            <div className="px-4 py-3 bg-[#fce8e6] text-[#cc1c14] rounded-lg text-[13px]">{error}</div>
-                        </div>
-                    ) : (
-                        <div
-                            className="rounded-xl border border-[#e5e5e5] shadow-sm overflow-hidden flex flex-col flex-1"
-                            style={{ minHeight: 0 }}
-                        >
-                            <DynamicTable
-                                dateColumns={dateColumns}
-                                rows={rows}
-                                selectedRowIds={selectedRowIds}
-                                onToggleRow={handleToggleRow}
-                                onToggleAll={handleToggleAll}
-                                editingRowIds={editingRowIds}
-                                editValues={editValues}
-                                onEditCellChange={handleEditCellChange}
-                                onSaveRow={handleSaveRow}
-                                onCancelRow={handleCancelRow}
-                            />
-                        </div>
-                    )}
-                </div>
-            </main>
-        </div>
+                    </div>
+                ) : loading ? (
+                    <div className="flex-1 flex items-center justify-center gap-3 text-[#6a6d70]">
+                        <div className="w-8 h-8 border-2 border-[#e5e5e5] border-t-[#0a6ed1] rounded-full animate-spin" />
+                        <span className="text-[14px]">Fetching data…</span>
+                    </div>
+                ) : error ? (
+                    <div className="flex-1 flex items-center justify-center">
+                        <div className="px-4 py-3 bg-[#fce8e6] text-[#cc1c14] rounded-lg text-[13px]">{error}</div>
+                    </div>
+                ) : (
+                    <div
+                        className="rounded-xl border border-[#e5e5e5] shadow-sm overflow-hidden flex flex-col flex-1"
+                        style={{ minHeight: 0 }}
+                    >
+                        <DynamicTable
+                            dateColumns={dateColumns}
+                            rows={rows}
+                            selectedRowIds={selectedRowIds}
+                            onToggleRow={handleToggleRow}
+                            onToggleAll={handleToggleAll}
+                            editingRowIds={editingRowIds}
+                            editValues={editValues}
+                            onEditCellChange={handleEditCellChange}
+                            onSaveRow={handleSaveRow}
+                            onCancelRow={handleCancelRow}
+                        />
+                    </div>
+                )}
+            </div>
+        </main>
     )
 }
