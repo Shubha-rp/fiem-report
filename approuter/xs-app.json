@@ -1,17 +1,18 @@
 {
   "welcomeFile": "/index.html",
-  "authenticationMethod": "none",
+  "authenticationMethod": "route",
   "routes": [
     {
       "source": "^/sap/(.*)$",
       "target": "/sap/$1",
       "destination": "FIEM_dev",
-      "csrfProtection": false
+      "csrfProtection": false,
+      "authenticationType": "xsuaa"
     },
     {
       "source": "^/index.html$",
       "localDir": "resources",
-      "authenticationType": "none"
+      "authenticationType": "xsuaa"
     },
     {
       "source": "^/(assets|static)/(.*)$",
@@ -22,7 +23,7 @@
       "source": "^(.*)$",
       "localDir": "resources",
       "target": "/index.html",
-      "authenticationType": "none"
+      "authenticationType": "xsuaa"
     }
   ]
 }
