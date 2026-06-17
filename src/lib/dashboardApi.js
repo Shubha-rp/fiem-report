@@ -1,58 +1,137 @@
-import { generateMockDashboard } from './mockData'
+const SRV = '/sap/opu/odata/SAP/ZSALES_SCHEDULE_SRV'
 
-// const SRV = '/sap/opu/odata/shiv/<SERVICE_NAME_TBD>'
-// const authConfig = { loginId: '<your-id>', loginType: 'E' }
-
-const SIMULATED_LATENCY = 600
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function parseSapDate(dateStr) {
+    if (!dateStr) return null
+    const match = dateStr.match(/\/Date\((\d+)\)\//)
+    if (!match) return null
+    return new Date(parseInt(match[1]))
 }
 
-// Go button — fetch the schedule table for a customer.
-// Real version should look roughly like AsnReportApi.fetchReport():
-// build an OData $filter from customerCode/materialDescription, fetch,
-// then map the raw OData rows + the backend's dynamic column list into
-// { dateColumns, rows } the same way mockData.js does here.
+function formatDateLabel(date) {
+    return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`
+}
+
+function formatDateKey(date) {
+    return date.toISOString().split('T')[0]
+}
+
+function mapSapResponse(results) {
+    const rowMap = new Map()
+    const dateKeySet = new Map()
+
+    results.forEach((item) => {
+        // Full composite key — all four fields form the unique key in SAP
+        const rowKey = `${item.Kunnr}|${item.Vbeln}|${item.Posnr}|${item.Matnr}`
+
+        if (!rowMap.has(rowKey)) {
+            rowMap.set(rowKey, {
+                id: rowKey,
+                kunnr: item.Kunnr,   // store so PATCH can use correct Kunnr
+                edatu: item.Edatu,
+                so: item.Vbeln,
+                li: item.Posnr,
+                sap: item.Matnr,
+                materialDescription: item.Postx,
+                plt: item.Werks,
+                cp: item.Ettyp,
+                status: item.Status ?? '',
+                approve: item.approve ?? '',
+                values: {},
+            })
+        }
+
+        const date = parseSapDate(item.Edatu)
+        if (date) {
+            const key = formatDateKey(date)
+            const label = formatDateLabel(date)
+            if (!dateKeySet.has(key)) dateKeySet.set(key, label)
+            rowMap.get(rowKey).values[key] = parseFloat(item.Wmeng) || ''
+        }
+    })
+
+    const sortedDateKeys = [...dateKeySet.keys()].sort()
+    const dateColumns = sortedDateKeys.map((key) => ({ key, label: dateKeySet.get(key) }))
+
+    // Only rows where bot posted but no action taken yet
+    const rows = [...rowMap.values()].filter((r) => r.status === '' && r.approve === '')
+
+    return { dateColumns, rows }
+}
+
 export async function fetchDashboard({ customerCode, materialDescription } = {}) {
-  await delay(SIMULATED_LATENCY)
+    if (!customerCode || !customerCode.trim()) {
+        throw new Error('Customer code is required')
+    }
 
-  if (!customerCode || !customerCode.trim()) {
-    throw new Error('Customer code is required')
-  }
+    // Build filter — using Kunnr eq for exact match
+    const filters = [`Kunnr eq '${customerCode.trim()}'`]
+    if (materialDescription && materialDescription.trim()) {
+        filters.push(`substringof('${materialDescription.trim()}',Postx)`)
+    }
+    const filter = filters.join(' and ')
 
-  // TODO — replace with:
-  // const f = buildFilter({ CustomerCode: customerCode }, { MaterialDescription: materialDescription })
-  // const data = await odata(`/ScheduleSet?$filter=${f}`)
-  // return mapDashboardResponse(data)
+    const url = `${SRV}/itemSet?$filter=${encodeURIComponent(filter)}&$format=json`
 
-  return generateMockDashboard({ customerCode, materialDescription })
+    console.log('[fetchDashboard] GET', url)  // remove after testing
+
+    const res = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+    })
+
+    if (!res.ok) {
+        throw new Error(`SAP returned ${res.status} — ${res.statusText}`)
+    }
+
+    const data = await res.json()
+    const results = data?.d?.results ?? []
+
+    console.log('[fetchDashboard] raw results count:', results.length)  // remove after testing
+    console.log('[fetchDashboard] sample:', results[0])                 // remove after testing
+
+    return mapSapResponse(results)
 }
 
-// Approve / Reject — POST a single row's decision back to the backend.
-// action is 'approve' | 'reject'.
-export async function postRowAction({ rowId, action, remarks = '' } = {}) {
-  await delay(450)
+export async function postRowAction({ rowId, action, kunnr, vbeln, posnr, matnr, edatu } = {}) {
+    const approve = action === 'approve' ? 'A' : 'R'
 
-  // TODO — replace with:
-  // const res = await fetch(`${SRV}/ApprovalSet`, {
-  //   method: 'POST',
-  //   headers: {
-  //     'Content-Type': 'application/json',
-  //     Loginid: authConfig.loginId,
-  //     Logintype: authConfig.loginType,
-  //   },
-  //   credentials: 'include',
-  //   body: JSON.stringify({ RowId: rowId, Action: action, Remarks: remarks }),
-  // })
-  // if (!res.ok) throw new Error(`OData ${res.status}`)
-  // return res.json()
+    // Step 1: fetch CSRF token
+    const tokenRes = await fetch(`${SRV}/itemSet?$top=0`, {
+        method: 'GET',
+        headers: {
+            'x-csrf-token': 'Fetch',
+            Accept: 'application/json',
+        },
+        credentials: 'include',
+    })
+    const csrfToken = tokenRes.headers.get('x-csrf-token')
 
-  // Mock occasionally fails so the UI's error handling has something
-  // real to show — remove once the real endpoint exists.
-  if (Math.random() < 0.05) {
-    throw new Error('Backend rejected the update. Please retry.')
-  }
+    if (!csrfToken) {
+        throw new Error('Could not retrieve CSRF token from SAP')
+    }
 
-  return { rowId, status: action === 'approve' ? 'Approved' : 'Rejected' }
+    // Step 2: PATCH using full composite key
+    // Edatu needs to be passed in datetime format if present, blank if not
+    const edatuPart = edatu ? `,Edatu=datetime'${edatu}'` : `,Edatu=`
+    const entityKey = `itemSet(Kunnr='${kunnr}',Vbeln='${vbeln}',Posnr='${posnr}',Matnr='${matnr}'${edatuPart})`
+
+    console.log('[postRowAction] PATCH', `${SRV}/${entityKey}`)  // remove after testing
+
+    const res = await fetch(`${SRV}/${entityKey}`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'x-csrf-token': csrfToken,
+        },
+        credentials: 'include',
+        body: JSON.stringify({ approve }),
+    })
+
+    if (!res.ok) {
+        throw new Error(`SAP update failed — ${res.status} ${res.statusText}`)
+    }
+
+    return { rowId, approve, status: approve === 'A' ? 'X' : '' }
 }

@@ -55,14 +55,15 @@ export function generateMockDashboard({ customerCode, materialDescription }) {
 
     return {
       id: `${customerCode}-${idx + 1}`,
-      so: `45${1000 + idx}`,
-      li: String(idx + 1),
-      sap: `100${2000 + idx}`,
-      materialDescription: material,
-      plt: PLANTS[idx % PLANTS.length],
-      cp: idx % 2 === 0 ? 'CP01' : 'CP02',
-      status: 'Pending', // Pending | Approved | Rejected
-      values,
+  so: `45${1000 + idx}`,
+  li: String(idx + 1),
+  sap: `100${2000 + idx}`,
+  materialDescription: material,
+  plt: PLANTS[idx % PLANTS.length],
+  cp: idx % 2 === 0 ? 'CP01' : 'CP02',
+  status: '',    // '' until BAPI posts → 'X'
+  approve: '',   // '' | 'A' | 'R'
+  values,
     }
   })
 

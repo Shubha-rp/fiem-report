@@ -9,7 +9,6 @@ export default function FilterBar({
   onGo,
   onClear,
   loading,
-  // Bulk approve/reject
   selectedCount,
   canAct,
   isActing,
@@ -17,6 +16,9 @@ export default function FilterBar({
   onApprove,
   onReject,
   actionError,
+  canEdit,
+  onEdit,
+  editingCount,
 }) {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') onGo()
@@ -51,7 +53,6 @@ export default function FilterBar({
           />
         </div>
 
-        {/* Right-aligned action cluster: Go/Clear, then a divider, then Approve/Reject */}
         <div className="flex items-center gap-2 ml-auto">
           <Button
             onClick={onGo}
@@ -71,6 +72,19 @@ export default function FilterBar({
           </Button>
 
           <div className="w-px h-9 bg-[#e5e5e5] mx-1" />
+
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={!canEdit}
+            className={`px-4 h-10 text-[13px] font-semibold rounded-lg transition-all ${
+              canEdit
+                ? 'text-white bg-[#e76500] hover:bg-[#c45400]'
+                : 'text-[#a8aaac] bg-[#e5e5e5] cursor-not-allowed'
+            }`}
+          >
+            {editingCount ? `Editing (${editingCount})` : `Edit${selectedCount ? ` (${selectedCount})` : ''}`}
+          </button>
 
           <button
             type="button"
