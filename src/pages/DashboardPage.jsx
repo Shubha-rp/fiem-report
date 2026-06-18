@@ -1,28 +1,73 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import FilterBar    from '@/components/FilterBar'
 import DynamicTable from '@/components/DynamicTable'
-import { fetchDashboard, postBulkAction } from '@/lib/dashboardApi'
+import {
+    fetchDashboard,
+    postBulkAction,
+    fetchCustomerF4,
+    fetchSalesDocumentF4,
+    fetchMaterialF4,
+    fetchPlantF4,
+} from '@/lib/dashboardApi'
+
+const todayIso = () => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const monthsAgoIso = (n) => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - n)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default function DashboardPage() {
-    const [customerCode,        setCustomerCode]        = useState('')
-    const [materialDescription, setMaterialDescription] = useState('')
+    // ── F4 filter state ──
+    const [customerCode, setCustomerCode] = useState('')
+    const [vbeln,        setVbeln]        = useState('')
+    const [matnr,        setMatnr]        = useState('')
+    const [werks,        setWerks]        = useState('')
 
+    // ── Date range (client-side filter only) ──
+    const [dateFrom, setDateFrom] = useState(monthsAgoIso(1))
+    const [dateTo,   setDateTo]   = useState(todayIso())
+
+    // ── Value help modal state ──
+    const [vhModal,   setVhModal]   = useState(null)   // 'customer' | 'salesDoc' | 'material' | 'plant'
+    const [vhOptions, setVhOptions] = useState([])
+
+    // ── Table data ──
     const [dateColumns, setDateColumns] = useState([])
     const [allRows,     setAllRows]     = useState([])
 
-    // User2 only sees rows User1 rejected: status='' and approve='R'
-    const rows = allRows.filter(r => r.status === '' && r.approve === 'R')
+    // User2 sees only rows where status='' and approve='R'
+    const baseRows = allRows.filter(r => r.status === '' && r.approve === 'R')
+
+    // ── Client-side date filter applied on top of baseRows ──
+    const rows = useMemo(() => {
+        if (!dateFrom && !dateTo) return baseRows
+        return baseRows.filter(r => {
+            // edatu on the row is the raw SAP date string e.g. "20240315"
+            // We filter using the dateLines keys which are ISO date strings
+            const rowDates = Object.keys(r.dateLines)
+            if (!rowDates.length) return true
+            return rowDates.some(dateKey => {
+                if (dateFrom && dateKey < dateFrom) return false
+                if (dateTo   && dateKey > dateTo)   return false
+                return true
+            })
+        })
+    }, [baseRows, dateFrom, dateTo])
 
     const [loading,     setLoading]     = useState(false)
     const [error,       setError]       = useState(null)
     const [hasSearched, setHasSearched] = useState(false)
 
     const [selectedRowIds, setSelectedRowIds] = useState(new Set())
-
-    const [isActing,      setIsActing]      = useState(false)
-    const [pendingAction, setPendingAction] = useState(null)
-    const [actionError,   setActionError]   = useState(null)
-    const [actionSuccess, setActionSuccess] = useState(null)
+    const [isActing,       setIsActing]       = useState(false)
+    const [pendingAction,  setPendingAction]  = useState(null)
+    const [actionError,    setActionError]    = useState(null)
+    const [actionSuccess,  setActionSuccess]  = useState(null)
 
     const [editingRowIds, setEditingRowIds] = useState(new Set())
     const [editValues,    setEditValues]    = useState({})
@@ -30,6 +75,38 @@ export default function DashboardPage() {
     const selectedCount = selectedRowIds.size
     const canAct        = selectedCount > 0 && !isActing
 
+    // ── Open Value Help ──
+    const openVh = async (field) => {
+        setVhModal(field)
+        setVhOptions([])
+        try {
+            let opts = []
+            switch (field) {
+                case 'customer': opts = await fetchCustomerF4();     break
+                case 'salesDoc': opts = await fetchSalesDocumentF4(); break
+                case 'material': opts = await fetchMaterialF4();      break
+                case 'plant':    opts = await fetchPlantF4();         break
+                default:         opts = []
+            }
+            setVhOptions(opts)
+        } catch {
+            setVhOptions([])
+        }
+    }
+
+    const handleVhSelect = (opt) => {
+        switch (vhModal) {
+            case 'customer': setCustomerCode(opt.code); break
+            case 'salesDoc': setVbeln(opt.code);        break
+            case 'material': setMatnr(opt.code);        break
+            case 'plant':    setWerks(opt.code);        break
+        }
+        setVhModal(null)
+    }
+
+    const handleVhCancel = () => setVhModal(null)
+
+    // ── Go ──
     const handleGo = async () => {
         setLoading(true)
         setError(null)
@@ -39,7 +116,13 @@ export default function DashboardPage() {
         setEditingRowIds(new Set())
         setEditValues({})
         try {
-            const data = await fetchDashboard({ customerCode, materialDescription })
+            // Date range is NOT sent to API — applied client-side
+            const data = await fetchDashboard({
+                customerCode,
+                vbeln,
+                matnr,
+                werks,
+            })
             setDateColumns(data.dateColumns)
             setAllRows(data.rows)
             setHasSearched(true)
@@ -50,9 +133,14 @@ export default function DashboardPage() {
         }
     }
 
+    // ── Clear ──
     const handleClear = () => {
         setCustomerCode('')
-        setMaterialDescription('')
+        setVbeln('')
+        setMatnr('')
+        setWerks('')
+        setDateFrom(monthsAgoIso(1))
+        setDateTo(todayIso())
         setDateColumns([])
         setAllRows([])
         setHasSearched(false)
@@ -112,7 +200,7 @@ export default function DashboardPage() {
         setAllRows((current) =>
             current.map((r) => {
                 if (r.id !== rowId) return r
-                const newValues = { ...r.values, ...edits }
+                const newValues    = { ...r.values, ...edits }
                 const newDateLines = { ...r.dateLines }
                 Object.entries(edits).forEach(([dateKey, val]) => {
                     if (newDateLines[dateKey]) {
@@ -128,15 +216,14 @@ export default function DashboardPage() {
 
     const handleCancelRow = (rowId) => {
         setEditingRowIds((prev) => { const next = new Set(prev); next.delete(rowId); return next })
-        setEditValues((prev) => { const next = { ...prev }; delete next[rowId]; return next })
+        setEditValues((prev)    => { const next = { ...prev }; delete next[rowId]; return next })
     }
 
     const handleBulkAction = async (action) => {
         const targetRows = rows.filter(r => selectedRowIds.has(r.id))
         if (!targetRows.length) return
 
-        const stillEditing = targetRows.some(r => editingRowIds.has(r.id))
-        if (stillEditing) {
+        if (targetRows.some(r => editingRowIds.has(r.id))) {
             setActionError('Save or cancel open edits before approving.')
             return
         }
@@ -150,10 +237,10 @@ export default function DashboardPage() {
             await postBulkAction({ rows: targetRows, action, editValues })
 
             const actedIds = new Set(targetRows.map(r => r.id))
-            setAllRows(prev => prev.filter(r => !actedIds.has(r.id)))
-            setSelectedRowIds(prev => { const n = new Set(prev); actedIds.forEach(id => n.delete(id)); return n })
-            setEditValues(prev => { const n = { ...prev }; actedIds.forEach(id => delete n[id]); return n })
-            setEditingRowIds(prev => { const n = new Set(prev); actedIds.forEach(id => n.delete(id)); return n })
+            setAllRows(prev         => prev.filter(r => !actedIds.has(r.id)))
+            setSelectedRowIds(prev  => { const n = new Set(prev); actedIds.forEach(id => n.delete(id)); return n })
+            setEditValues(prev      => { const n = { ...prev };   actedIds.forEach(id => delete n[id]); return n })
+            setEditingRowIds(prev   => { const n = new Set(prev); actedIds.forEach(id => n.delete(id)); return n })
 
             setActionSuccess(
                 `${targetRows.length} row${targetRows.length > 1 ? 's' : ''} approved successfully.`
@@ -171,21 +258,31 @@ export default function DashboardPage() {
             <FilterBar
                 customerCode={customerCode}
                 onCustomerCodeChange={setCustomerCode}
-                materialDescription={materialDescription}
-                onMaterialDescriptionChange={setMaterialDescription}
+                vbeln={vbeln}
+                onVbelnChange={setVbeln}
+                matnr={matnr}
+                onMatnrChange={setMatnr}
+                werks={werks}
+                onWerksChange={setWerks}
+                dateFrom={dateFrom}
+                onDateFromChange={setDateFrom}
+                dateTo={dateTo}
+                onDateToChange={setDateTo}
                 onGo={handleGo}
                 onClear={handleClear}
                 loading={loading}
-
+                vhModal={vhModal}
+                vhOptions={vhOptions}
+                onOpenVh={openVh}
+                onVhSelect={handleVhSelect}
+                onVhCancel={handleVhCancel}
                 selectedCount={selectedCount}
                 canAct={canAct}
                 isActing={isActing}
                 pendingAction={pendingAction}
-
                 onEdit={handleEdit}
                 onApprove={() => handleBulkAction('A')}
                 editingCount={editingRowIds.size}
-
                 actionError={actionError}
                 actionSuccess={actionSuccess}
             />
@@ -195,7 +292,7 @@ export default function DashboardPage() {
                     <div className="flex-1 flex items-center justify-center text-center text-[#6a6d70]">
                         <div>
                             <div className="text-[15px] font-semibold mb-1">No data loaded</div>
-                            <div className="text-[13px]">Enter a customer code and click <strong>Go</strong></div>
+                            <div className="text-[13px]">Select a customer and click <strong>Go</strong></div>
                         </div>
                     </div>
                 ) : loading ? (

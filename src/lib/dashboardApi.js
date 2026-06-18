@@ -10,7 +10,6 @@ function parseSapDate(dateStr) {
     }
     const epochMatch = dateStr.match(/\/Date\((\d+)\)\//)
     if (epochMatch) return new Date(parseInt(epochMatch[1]))
-
     return null
 }
 
@@ -23,7 +22,7 @@ function formatDateKey(date) {
 }
 
 function mapSapResponse(results) {
-    const rowMap = new Map()
+    const rowMap     = new Map()
     const dateKeySet = new Map()
 
     results.forEach((item) => {
@@ -48,8 +47,8 @@ function mapSapResponse(results) {
                 cp:                  item.Ettyp   ?? '',
                 status:              item.Status  ?? '',
                 approve:             item.approve ?? '',
-                values: {},
-                dateLines: {},  // date key → { edatu: rawSapString, wmeng: stringValue }
+                values:    {},
+                dateLines: {},
             })
         }
 
@@ -60,8 +59,8 @@ function mapSapResponse(results) {
             if (!dateKeySet.has(key)) dateKeySet.set(key, label)
             rowMap.get(rowKey).values[key]    = parseFloat(item.Wmeng) || 0
             rowMap.get(rowKey).dateLines[key] = {
-                edatu: item.Edatu,               // original SAP date string — sent back as-is
-                wmeng: String(item.Wmeng ?? '0'), // always a non-empty string
+                edatu: item.Edatu,
+                wmeng: String(item.Wmeng ?? '0'),
             }
         }
     })
@@ -73,20 +72,21 @@ function mapSapResponse(results) {
     return { dateColumns, rows }
 }
 
-export async function fetchDashboard({ customerCode, materialDescription } = {}) {
+export async function fetchDashboard({ customerCode, materialDescription, vbeln, matnr, werks } = {}) {
     if (!customerCode?.trim()) throw new Error('Customer code is required')
 
     const filters = [`Kunnr eq '${customerCode.trim()}'`]
-    if (materialDescription?.trim()) {
-        filters.push(`substringof('${materialDescription.trim()}',Postx)`)
-    }
+    if (materialDescription?.trim()) filters.push(`substringof('${materialDescription.trim()}',Postx)`)
+    if (vbeln?.trim())               filters.push(`Vbeln eq '${vbeln.trim()}'`)
+    if (matnr?.trim())               filters.push(`Matnr eq '${matnr.trim()}'`)
+    if (werks?.trim())               filters.push(`Werks eq '${werks.trim()}'`)
 
     const url = `${SRV}/itemSet?$filter=${encodeURIComponent(filters.join(' and '))}&$format=json`
     console.log('[fetchDashboard] GET', url)
 
     const res = await fetch(url, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
+        method:      'GET',
+        headers:     { Accept: 'application/json' },
         credentials: 'include',
     })
 
@@ -96,15 +96,14 @@ export async function fetchDashboard({ customerCode, materialDescription } = {})
     const results = data?.d?.results ?? []
 
     console.log('[fetchDashboard] raw count:', results.length)
-    console.log('[fetchDashboard] sample:', results[0])
+    console.log('[fetchDashboard] sample:',    results[0])
 
     return mapSapResponse(results)
 }
 
-// ── CSRF token ────────────────────────────────────────────────
 async function getCsrfToken() {
     const res = await fetch(`${SRV}/itemSet?$top=0`, {
-        method: 'GET',
+        method:  'GET',
         headers: { 'x-csrf-token': 'Fetch', Accept: 'application/json' },
         credentials: 'include',
     })
@@ -113,31 +112,16 @@ async function getCsrfToken() {
     return token
 }
 
-// ── Deep-entity POST to headerSet ─────────────────────────────
-// rows      : array of full row objects from state
-// action    : 'A' (approve) | 'R' (reject)
-// editValues: { [rowId]: { [dateKey]: value } }  — User 2 staged edits
-//
-// Payload per backend spec:
-// { "Vbeln": "", "itemSet": [{ Vbeln, Posnr, Matnr, Postx, Werks, Ettyp, Kunnr, Edatu, Wmeng, Status:"", approve }] }
-// Status is NEVER set by the frontend — always sent as "".
-// One itemSet entry per date line per row — mirrors original OData structure.
-// Wmeng: edited value if User 2 changed it, otherwise original value from SAP. Never blank.
-
 export async function postBulkAction({ rows, action, editValues = {} }) {
     const csrfToken = await getCsrfToken()
-
-    const itemSet = []
+    const itemSet   = []
 
     rows.forEach((row) => {
-        const edited = editValues[row.id]  // { [dateKey]: newValue } or undefined
-
+        const edited = editValues[row.id]
         Object.entries(row.dateLines).forEach(([dateKey, line]) => {
-            // Use edited value if present and non-empty, otherwise use original from SAP
             const wmeng = (edited && edited[dateKey] !== undefined && edited[dateKey] !== '')
                 ? String(edited[dateKey])
-                : line.wmeng   // original — always a non-empty string
-
+                : line.wmeng
             itemSet.push({
                 Vbeln:   row.vbeln,
                 Posnr:   row.posnr,
@@ -146,20 +130,19 @@ export async function postBulkAction({ rows, action, editValues = {} }) {
                 Werks:   row.werks,
                 Ettyp:   row.ettyp,
                 Kunnr:   row.kunnr,
-                Edatu:   line.edatu,  // original SAP date string sent back as-is
-                Wmeng:   wmeng,       // always non-empty
-                Status:  '',         
+                Edatu:   line.edatu,
+                Wmeng:   wmeng,
+                Status:  '',
                 approve: action,
             })
         })
     })
 
     const payload = { Vbeln: '', itemSet }
-
     console.log('[postBulkAction] POST to headerSet:', JSON.stringify(payload, null, 2))
 
     const res = await fetch(`${SRV}/headerSet`, {
-        method: 'POST',
+        method:  'POST',
         headers: {
             'Content-Type': 'application/json',
             Accept:         'application/json',
@@ -176,4 +159,66 @@ export async function postBulkAction({ rows, action, editValues = {} }) {
 
     if (res.status === 204) return { success: true }
     return res.json()
+}
+
+// ── F4 Value Help fetchers ────────────────────────────────────
+
+export async function fetchCustomerF4() {
+    const url = `${SRV}/CustomerF4Set?$format=json`
+    const res = await fetch(url, {
+        method:      'GET',
+        headers:     { Accept: 'application/json' },
+        credentials: 'include',
+    })
+    if (!res.ok) throw new Error(`CustomerF4 failed: ${res.status}`)
+    const data = await res.json()
+    return (data?.d?.results ?? []).map(r => ({
+        code:  String(r.KUNNR ?? ''),
+        label: String(r.NAME  ?? ''),
+    }))
+}
+
+export async function fetchSalesDocumentF4() {
+    const url = `${SRV}/SalesDocumentF4Set?$format=json`
+    const res = await fetch(url, {
+        method:      'GET',
+        headers:     { Accept: 'application/json' },
+        credentials: 'include',
+    })
+    if (!res.ok) throw new Error(`SalesDocumentF4 failed: ${res.status}`)
+    const data = await res.json()
+    return (data?.d?.results ?? []).map(r => ({
+        code:  String(r.VBELN ?? ''),
+        label: '',
+    }))
+}
+
+export async function fetchMaterialF4() {
+    const url = `${SRV}/MaterialF4Set?$format=json`
+    const res = await fetch(url, {
+        method:      'GET',
+        headers:     { Accept: 'application/json' },
+        credentials: 'include',
+    })
+    if (!res.ok) throw new Error(`MaterialF4 failed: ${res.status}`)
+    const data = await res.json()
+    return (data?.d?.results ?? []).map(r => ({
+        code:  String(r.MATNR ?? ''),
+        label: '',
+    }))
+}
+
+export async function fetchPlantF4() {
+    const url = `${SRV}/PlantF4Set?$format=json`
+    const res = await fetch(url, {
+        method:      'GET',
+        headers:     { Accept: 'application/json' },
+        credentials: 'include',
+    })
+    if (!res.ok) throw new Error(`PlantF4 failed: ${res.status}`)
+    const data = await res.json()
+    return (data?.d?.results ?? []).map(r => ({
+        code:  String(r.WERKS ?? ''),
+        label: '',
+    }))
 }
