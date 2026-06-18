@@ -1,22 +1,17 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import FilterBar    from '@/components/FilterBar'
 import DynamicTable from '@/components/DynamicTable'
 import { fetchDashboard, postBulkAction } from '@/lib/dashboardApi'
 
-const filterForRole = (rows, role) => {
-    if (role === 'user1') return rows.filter(r => r.status === '' && r.approve === '')
-    if (role === 'user2') return rows.filter(r => r.status === '' && r.approve === 'R')
-    return []
-}
-
 export default function DashboardPage() {
-    const [userRole, setUserRole] = useState('user1')
-
     const [customerCode,        setCustomerCode]        = useState('')
     const [materialDescription, setMaterialDescription] = useState('')
 
     const [dateColumns, setDateColumns] = useState([])
     const [allRows,     setAllRows]     = useState([])
+
+    // User2 only sees rows User1 rejected: status='' and approve='R'
+    const rows = allRows.filter(r => r.status === '' && r.approve === 'R')
 
     const [loading,     setLoading]     = useState(false)
     const [error,       setError]       = useState(null)
@@ -31,8 +26,6 @@ export default function DashboardPage() {
 
     const [editingRowIds, setEditingRowIds] = useState(new Set())
     const [editValues,    setEditValues]    = useState({})
-
-    const rows = useMemo(() => filterForRole(allRows, userRole), [allRows, userRole])
 
     const selectedCount = selectedRowIds.size
     const canAct        = selectedCount > 0 && !isActing
@@ -114,15 +107,12 @@ export default function DashboardPage() {
         }))
     }
 
-    // Commits edits locally into allRows (both values + dateLines), exits edit mode, re-selects row
     const handleSaveRow = (rowId) => {
         const edits = editValues[rowId] ?? {}
         setAllRows((current) =>
             current.map((r) => {
                 if (r.id !== rowId) return r
-                // Update values (display)
                 const newValues = { ...r.values, ...edits }
-                // Update dateLines (used by postBulkAction for Wmeng)
                 const newDateLines = { ...r.dateLines }
                 Object.entries(edits).forEach(([dateKey, val]) => {
                     if (newDateLines[dateKey]) {
@@ -134,7 +124,6 @@ export default function DashboardPage() {
         )
         setEditingRowIds((prev) => { const next = new Set(prev); next.delete(rowId); return next })
         setSelectedRowIds((prev) => new Set([...prev, rowId]))
-        // Keep editValues — cleared after POST
     }
 
     const handleCancelRow = (rowId) => {
@@ -167,7 +156,7 @@ export default function DashboardPage() {
             setEditingRowIds(prev => { const n = new Set(prev); actedIds.forEach(id => n.delete(id)); return n })
 
             setActionSuccess(
-                `${targetRows.length} row${targetRows.length > 1 ? 's' : ''} ${action === 'A' ? 'approved' : 'rejected'} successfully.`
+                `${targetRows.length} row${targetRows.length > 1 ? 's' : ''} approved successfully.`
             )
         } catch (err) {
             setActionError(err.message || 'Action failed — please try again.')
@@ -188,26 +177,13 @@ export default function DashboardPage() {
                 onClear={handleClear}
                 loading={loading}
 
-                userRole={userRole}
-                onRoleChange={(role) => {
-                    setUserRole(role)
-                    setSelectedRowIds(new Set())
-                    setEditingRowIds(new Set())
-                    setEditValues({})
-                    setActionError(null)
-                    setActionSuccess(null)
-                }}
-
                 selectedCount={selectedCount}
                 canAct={canAct}
                 isActing={isActing}
                 pendingAction={pendingAction}
 
-                onApprove={userRole      === 'user1' ? () => handleBulkAction('A') : undefined}
-                onReject={userRole       === 'user1' ? () => handleBulkAction('R') : undefined}
-
-                onEdit={userRole         === 'user2' ? handleEdit                  : undefined}
-                onApproveUser2={userRole === 'user2' ? () => handleBulkAction('A') : undefined}
+                onEdit={handleEdit}
+                onApprove={() => handleBulkAction('A')}
                 editingCount={editingRowIds.size}
 
                 actionError={actionError}
@@ -244,7 +220,6 @@ export default function DashboardPage() {
                             onEditCellChange={handleEditCellChange}
                             onSaveRow={handleSaveRow}
                             onCancelRow={handleCancelRow}
-                            userRole={userRole}
                         />
                     </div>
                 )}

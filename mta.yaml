@@ -1,10 +1,10 @@
 _schema-version: "3.1"
-ID: FIEM-report
+ID: FIEM-report-user2
 version: 1.0.0
 
 modules:
 
-  - name: FIEM-report
+  - name: FIEM-report-user2-ui
     type: html5
     path: .
     build-parameters:
@@ -13,18 +13,18 @@ modules:
         - npm install
         - npm run build
       build-result: approuter/resources
-      supported-platforms: []   
+      supported-platforms: []
 
-  - name: FIEM-report-approuter
+  - name: fiem-report-user2
     type: approuter.nodejs
     path: approuter
     parameters:
       memory: 256M
       disk-quota: 512M
     requires:
-      - name: destination-report-service
-      - name: connectivity-report-service
-      - name: xsuaa-report-service
+      - name: destination-report-service-user2
+      - name: connectivity-report-service-user2
+      - name: xsuaa-report-service-user2
     provides:
       - name: approuter-api
         properties:
@@ -32,19 +32,19 @@ modules:
 
 resources:
 
-  - name: destination-report-service
+  - name: destination-report-service-user2
     type: org.cloudfoundry.managed-service
     parameters:
       service: destination
       service-plan: lite
 
-  - name: connectivity-report-service
+  - name: connectivity-report-service-user2
     type: org.cloudfoundry.managed-service
     parameters:
       service: connectivity
       service-plan: lite
 
-  - name: xsuaa-report-service
+  - name: xsuaa-report-service-user2
     type: org.cloudfoundry.managed-service
     parameters:
       service: xsuaa

@@ -10,26 +10,15 @@ export default function FilterBar({
     onClear,
     loading,
 
-    // role
-    userRole,
-    onRoleChange,           
-
-    // selection + action state
     selectedCount,
     canAct,
     isActing,
     pendingAction,
 
-    // User 1 callbacks (undefined for User 2)
-    onApprove,
-    onReject,
-
-    // User 2 callbacks (undefined for User 1)
     onEdit,
-    onApproveUser2,
+    onApprove,
     editingCount,
 
-    // feedback
     actionError,
     actionSuccess,
 }) {
@@ -41,7 +30,6 @@ export default function FilterBar({
         <div className="px-4 sm:px-6 lg:px-10 py-4 border-b border-[#e5e5e5] flex-shrink-0">
             <div className="flex flex-wrap items-end gap-3">
 
-                {/* ── Filter inputs ── */}
                 <div className="w-full sm:w-auto sm:min-w-[220px]">
                     <label className="block text-[12px] text-[#6a6d70] mb-1 font-semibold">
                         Customer Code <span className="text-[#cc1c14]">*</span>
@@ -90,113 +78,48 @@ export default function FilterBar({
 
                     <div className="w-px h-9 bg-[#e5e5e5] mx-1" />
 
-                    {/* ── User 1: Edit hidden, Approve + Reject shown ── */}
-                    {userRole === 'user1' && (
-                        <>
-                            <button
-                                type="button"
-                                onClick={onApprove}
-                                disabled={!canAct || (isActing && pendingAction !== 'A')}
-                                className={`flex items-center gap-1.5 px-4 h-10 text-[13px] font-semibold rounded-lg transition-all ${
-                                    canAct
-                                        ? 'text-white bg-[#107e3e] hover:bg-[#0c632f]'
-                                        : 'text-[#a8aaac] bg-[#e5e5e5] cursor-not-allowed'
-                                }`}
-                            >
-                                {isActing && pendingAction === 'A'
-                                    ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Approving…</>
-                                    : <>
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5"/></svg>
-                                        Approve{countLabel}
-                                      </>
-                                }
-                            </button>
+                    {/* Edit */}
+                    <button
+                        type="button"
+                        onClick={onEdit}
+                        disabled={!canAct || isActing}
+                        className={`flex items-center gap-1.5 px-4 h-10 text-[13px] font-semibold rounded-lg transition-all ${
+                            canAct && !isActing
+                                ? 'text-white bg-[#e76500] hover:bg-[#c45400]'
+                                : 'text-[#a8aaac] bg-[#e5e5e5] cursor-not-allowed'
+                        }`}
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/>
+                        </svg>
+                        {editingCount > 0 ? `Editing (${editingCount})` : `Edit${countLabel}`}
+                    </button>
 
-                            <button
-                                type="button"
-                                onClick={onReject}
-                                disabled={!canAct || (isActing && pendingAction !== 'R')}
-                                className={`flex items-center gap-1.5 px-4 h-10 text-[13px] font-semibold rounded-lg transition-all ${
-                                    canAct
-                                        ? 'text-white bg-[#cc1c14] hover:bg-[#a8160f]'
-                                        : 'text-[#a8aaac] bg-[#e5e5e5] cursor-not-allowed'
-                                }`}
-                            >
-                                {isActing && pendingAction === 'R'
-                                    ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Rejecting…</>
-                                    : <>
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                                        Reject{countLabel}
-                                      </>
-                                }
-                            </button>
-                        </>
-                    )}
-
-                    {/* ── User 2: Edit + Approve only, no Reject ── */}
-                    {userRole === 'user2' && (
-                        <>
-                            <button
-                                type="button"
-                                onClick={onEdit}
-                                disabled={!canAct || isActing}
-                                className={`flex items-center gap-1.5 px-4 h-10 text-[13px] font-semibold rounded-lg transition-all ${
-                                    canAct && !isActing
-                                        ? 'text-white bg-[#e76500] hover:bg-[#c45400]'
-                                        : 'text-[#a8aaac] bg-[#e5e5e5] cursor-not-allowed'
-                                }`}
-                            >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/>
-                                </svg>
-                                {editingCount > 0 ? `Editing (${editingCount})` : `Edit${countLabel}`}
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={onApproveUser2}
-                                disabled={!canAct || isActing || editingCount > 0}
-                                title={editingCount > 0 ? 'Save all edits before approving' : ''}
-                                className={`flex items-center gap-1.5 px-4 h-10 text-[13px] font-semibold rounded-lg transition-all ${
-                                    canAct && !isActing && editingCount === 0
-                                        ? 'text-white bg-[#107e3e] hover:bg-[#0c632f]'
-                                        : 'text-[#a8aaac] bg-[#e5e5e5] cursor-not-allowed'
-                                }`}
-                            >
-                                {isActing && pendingAction === 'A'
-                                    ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Approving…</>
-                                    : <>
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5"/></svg>
-                                        Approve{countLabel}
-                                      </>
-                                }
-                            </button>
-                        </>
-                    )}
-
-                    {/* ── DEV: role switcher — REMOVE BEFORE GO-LIVE ── */}
-                    <div className="flex items-center gap-1 border border-[#e5e5e5] rounded-lg p-1 ml-2">
-                        <span className="text-[10px] text-[#6a6d70] font-semibold px-1">DEV</span>
-                        {['user1', 'user2'].map((role) => (
-                            <button
-                                key={role}
-                                onClick={() => onRoleChange(role)}
-                                className={`px-2.5 h-7 text-[11px] font-semibold rounded-md transition-all ${
-                                    userRole === role
-                                        ? 'bg-[#0a6ed1] text-white'
-                                        : 'text-[#6a6d70] hover:bg-[#f5f6f7]'
-                                }`}
-                            >
-                                {role === 'user1' ? 'User 1' : 'User 2'}
-                            </button>
-                        ))}
-                    </div>
+                    {/* Approve */}
+                    <button
+                        type="button"
+                        onClick={onApprove}
+                        disabled={!canAct || isActing || editingCount > 0}
+                        title={editingCount > 0 ? 'Save all edits before approving' : ''}
+                        className={`flex items-center gap-1.5 px-4 h-10 text-[13px] font-semibold rounded-lg transition-all ${
+                            canAct && !isActing && editingCount === 0
+                                ? 'text-white bg-[#107e3e] hover:bg-[#0c632f]'
+                                : 'text-[#a8aaac] bg-[#e5e5e5] cursor-not-allowed'
+                        }`}
+                    >
+                        {isActing && pendingAction === 'A'
+                            ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Approving…</>
+                            : <>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+                                Approve{countLabel}
+                              </>
+                        }
+                    </button>
 
                 </div>
             </div>
 
-            {/* ── Feedback banners ── */}
             {actionSuccess && !actionError && (
                 <div className="mt-2.5 flex items-center gap-1.5 text-[12px] font-semibold text-[#107e3e]">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -213,7 +136,7 @@ export default function FilterBar({
                     {actionError}
                 </div>
             )}
-            {userRole === 'user2' && editingCount > 0 && !actionError && (
+            {editingCount > 0 && !actionError && (
                 <div className="mt-2.5 flex items-center gap-1.5 text-[12px] font-semibold text-[#e76500]">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
