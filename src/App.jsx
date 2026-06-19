@@ -4,7 +4,9 @@ import ApiTestPage from '@/pages/ApiTest'
 import ProtectedRoute from './components/ProtectedRoute' 
 function App() {
   const [page, setPage] = useState('dashboard') // 'dashboard' | 'apitest'
-
+  const handleLogout = () => {
+    window.location.href = "/do/logout";
+  };
   return (
     <ProtectedRoute>
     <div className="min-h-screen bg-[#f5f6f7] flex flex-col">
@@ -31,6 +33,12 @@ function App() {
             }`}
           >
             API Test
+          </button>
+           <button
+            onClick={handleLogout}
+            className="px-3 py-1 text-[12px] font-semibold rounded-full bg-red-600 text-white hover:bg-red-700"
+          >
+            Logout
           </button>
         </div>
       </header>
