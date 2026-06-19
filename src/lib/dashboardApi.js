@@ -80,6 +80,7 @@ export async function fetchDashboard({ customerCode, materialDescription, vbeln,
     if (vbeln?.trim())               filters.push(`Vbeln eq '${vbeln.trim()}'`)
     if (matnr?.trim())               filters.push(`Matnr eq '${matnr.trim()}'`)
     if (werks?.trim())               filters.push(`Werks eq '${werks.trim()}'`)
+    filters.push(`type eq 'B'`)
 
     const url = `${SRV}/itemSet?$filter=${encodeURIComponent(filters.join(' and '))}&$format=json`
     console.log('[fetchDashboard] GET', url)
