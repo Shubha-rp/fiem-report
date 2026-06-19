@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import DashboardPage from '@/pages/DashboardPage'
 import ApiTestPage from '@/pages/ApiTest'
-
+import ProtectedRoute from './components/ProtectedRoute' 
 function App() {
   const [page, setPage] = useState('dashboard') // 'dashboard' | 'apitest'
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen bg-[#f5f6f7] flex flex-col">
       <header className="bg-white border-b border-[#e5e5e5] px-4 sm:px-6 lg:px-10 py-4 flex items-center justify-between">
         <h1 className="text-[18px] font-bold text-[#32363a]">Customer Schedule Dashboard</h1>
@@ -36,7 +37,7 @@ function App() {
 
       {page === 'dashboard' ? <DashboardPage /> : <ApiTestPage />}
     </div>
-  )
+  </ProtectedRoute>
+)
 }
-
 export default App
