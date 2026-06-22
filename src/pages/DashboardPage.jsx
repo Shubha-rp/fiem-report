@@ -40,24 +40,22 @@ export default function DashboardPage() {
     const [dateColumns, setDateColumns] = useState([])
     const [allRows,     setAllRows]     = useState([])
 
-    // User2 sees only rows where status='' and approve='R'
-    const baseRows = allRows.filter(r => r.status === '' && r.approve === 'R')
-
     // ── Client-side date filter applied on top of baseRows ──
     const rows = useMemo(() => {
-        if (!dateFrom && !dateTo) return baseRows
-        return baseRows.filter(r => {
-            // edatu on the row is the raw SAP date string e.g. "20240315"
-            // We filter using the dateLines keys which are ISO date strings
-            const rowDates = Object.keys(r.dateLines)
-            if (!rowDates.length) return true
-            return rowDates.some(dateKey => {
-                if (dateFrom && dateKey < dateFrom) return false
-                if (dateTo   && dateKey > dateTo)   return false
-                return true
-            })
+    const baseRows = allRows.filter(r => r.status === '' && r.approve === 'R')
+
+    if (!dateFrom && !dateTo) return baseRows
+
+    return baseRows.filter(r => {
+        const rowDates = Object.keys(r.dateLines)
+        if (!rowDates.length) return false  // no valid dates → hide
+        return rowDates.some(dateKey => {
+            if (dateFrom && dateKey < dateFrom) return false
+            if (dateTo   && dateKey > dateTo)   return false
+            return true
         })
-    }, [baseRows, dateFrom, dateTo])
+    })
+}, [allRows, dateFrom, dateTo])
 
     const [loading,     setLoading]     = useState(false)
     const [error,       setError]       = useState(null)

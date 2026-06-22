@@ -53,21 +53,26 @@ function mapSapResponse(results) {
         }
 
         const date = parseSapDate(item.Edatu)
-        if (date) {
-            const key   = formatDateKey(date)
-            const label = formatDateLabel(date)
-            if (!dateKeySet.has(key)) dateKeySet.set(key, label)
-            rowMap.get(rowKey).values[key]    = parseFloat(item.Wmeng) || 0
-            rowMap.get(rowKey).dateLines[key] = {
-                edatu: item.Edatu,
-                wmeng: String(item.Wmeng ?? '0'),
-            }
+        // Skip lines with invalid/zero dates entirely
+        if (!date) return
+
+        const key   = formatDateKey(date)
+        const label = formatDateLabel(date)
+        if (!dateKeySet.has(key)) dateKeySet.set(key, label)
+
+        const wmengNum = parseFloat(item.Wmeng)
+        rowMap.get(rowKey).values[key]    = isNaN(wmengNum) ? null : wmengNum
+        rowMap.get(rowKey).dateLines[key] = {
+            edatu: item.Edatu,
+            wmeng: String(item.Wmeng ?? '0'),
         }
     })
 
     const sortedDateKeys = [...dateKeySet.keys()].sort()
     const dateColumns    = sortedDateKeys.map((key) => ({ key, label: dateKeySet.get(key) }))
-    const rows           = [...rowMap.values()]
+
+    // Exclude rows with no valid date lines at all
+    const rows = [...rowMap.values()].filter(r => Object.keys(r.dateLines).length > 0)
 
     return { dateColumns, rows }
 }

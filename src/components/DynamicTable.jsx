@@ -99,10 +99,10 @@ export default function DynamicTable({
                 key={row.id}
                 onClick={() => isSelectable && onToggleRow(row.id)}
                 className={`border-b border-[#f0f0f0] last:border-b-0 transition-colors duration-100 ${isEditing
-                    ? 'bg-[#fffbf5] cursor-default'
-                    : isChecked
-                      ? 'bg-[#ebf5ff] cursor-pointer'
-                      : 'hover:bg-[#fafbfc] cursor-pointer'
+                  ? 'bg-[#fffbf5] cursor-default'
+                  : isChecked
+                    ? 'bg-[#ebf5ff] cursor-pointer'
+                    : 'hover:bg-[#fafbfc] cursor-pointer'
                   }`}
               >
                 <td className="py-3 px-3 border-r border-[#f0f0f0] text-center">
@@ -126,7 +126,7 @@ export default function DynamicTable({
                 {dateColumns.map((c) => {
                   const cellVal = isEditing
                     ? (editValues[row.id]?.[c.key] ?? '')
-                    : (row.values[c.key] ?? '')
+                    : row.values[c.key]  
 
                   return (
                     <td key={c.key}
@@ -135,12 +135,12 @@ export default function DynamicTable({
                         <input
                           type="number"
                           min="0"
-                          value={cellVal}
+                          value={cellVal ?? ''}
                           onChange={(e) => onEditCellChange(row.id, c.key, e.target.value)}
                           onClick={(e) => e.stopPropagation()}
                           className="w-full text-right text-[12px] border border-[#0a6ed1] rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#0a6ed1] bg-white tabular-nums"
                         />
-                      ) : cellVal === '' || cellVal == null ? (
+                      ) : cellVal == null ? (
                         <span className="text-[#d9d9d9]">—</span>
                       ) : (
                         cellVal
