@@ -22,40 +22,39 @@ const monthsAgoIso = (n) => {
 }
 
 export default function DashboardPage() {
-    // ── F4 filter state ──
-    const [customerCode, setCustomerCode] = useState('')
-    const [vbeln,        setVbeln]        = useState('')
-    const [matnr,        setMatnr]        = useState('')
-    const [werks,        setWerks]        = useState('')
+    // ── F4 filter state — arrays ──
+    const [customerCode, setCustomerCode] = useState([])
+    const [vbeln,        setVbeln]        = useState([])
+    const [matnr,        setMatnr]        = useState([])
+    const [werks,        setWerks]        = useState([])
 
     // ── Date range (client-side filter only) ──
     const [dateFrom, setDateFrom] = useState(monthsAgoIso(1))
     const [dateTo,   setDateTo]   = useState(todayIso())
 
     // ── Value help modal state ──
-    const [vhModal,   setVhModal]   = useState(null)   // 'customer' | 'salesDoc' | 'material' | 'plant'
+    const [vhModal,   setVhModal]   = useState(null)
     const [vhOptions, setVhOptions] = useState([])
 
     // ── Table data ──
     const [dateColumns, setDateColumns] = useState([])
     const [allRows,     setAllRows]     = useState([])
 
-    // ── Client-side date filter applied on top of baseRows ──
     const rows = useMemo(() => {
-    const baseRows = allRows.filter(r => r.status === '' && r.approve === 'R')
+        const baseRows = allRows.filter(r => r.status === '' && r.approve === 'R')
 
-    if (!dateFrom && !dateTo) return baseRows
+        if (!dateFrom && !dateTo) return baseRows
 
-    return baseRows.filter(r => {
-        const rowDates = Object.keys(r.dateLines)
-        if (!rowDates.length) return false  // no valid dates → hide
-        return rowDates.some(dateKey => {
-            if (dateFrom && dateKey < dateFrom) return false
-            if (dateTo   && dateKey > dateTo)   return false
-            return true
+        return baseRows.filter(r => {
+            const rowDates = Object.keys(r.dateLines)
+            if (!rowDates.length) return false
+            return rowDates.some(dateKey => {
+                if (dateFrom && dateKey < dateFrom) return false
+                if (dateTo   && dateKey > dateTo)   return false
+                return true
+            })
         })
-    })
-}, [allRows, dateFrom, dateTo])
+    }, [allRows, dateFrom, dateTo])
 
     const [loading,     setLoading]     = useState(false)
     const [error,       setError]       = useState(null)
@@ -80,26 +79,16 @@ export default function DashboardPage() {
         try {
             let opts = []
             switch (field) {
-                case 'customer': opts = await fetchCustomerF4();     break
+                case 'customer': opts = await fetchCustomerF4();      break
                 case 'salesDoc': opts = await fetchSalesDocumentF4(); break
-                case 'material': opts = await fetchMaterialF4();      break
-                case 'plant':    opts = await fetchPlantF4();         break
+                case 'material': opts = await fetchMaterialF4();       break
+                case 'plant':    opts = await fetchPlantF4();          break
                 default:         opts = []
             }
             setVhOptions(opts)
         } catch {
             setVhOptions([])
         }
-    }
-
-    const handleVhSelect = (opt) => {
-        switch (vhModal) {
-            case 'customer': setCustomerCode(opt.code); break
-            case 'salesDoc': setVbeln(opt.code);        break
-            case 'material': setMatnr(opt.code);        break
-            case 'plant':    setWerks(opt.code);        break
-        }
-        setVhModal(null)
     }
 
     const handleVhCancel = () => setVhModal(null)
@@ -114,7 +103,6 @@ export default function DashboardPage() {
         setEditingRowIds(new Set())
         setEditValues({})
         try {
-            // Date range is NOT sent to API — applied client-side
             const data = await fetchDashboard({
                 customerCode,
                 vbeln,
@@ -133,21 +121,13 @@ export default function DashboardPage() {
 
     // ── Clear ──
     const handleClear = () => {
-        setCustomerCode('')
-        setVbeln('')
-        setMatnr('')
-        setWerks('')
-        setDateFrom(monthsAgoIso(1))
-        setDateTo(todayIso())
-        setDateColumns([])
-        setAllRows([])
-        setHasSearched(false)
-        setError(null)
+        setCustomerCode([]); setVbeln([]); setMatnr([]); setWerks([])
+        setDateFrom(monthsAgoIso(1)); setDateTo(todayIso())
+        setDateColumns([]); setAllRows([])
+        setHasSearched(false); setError(null)
         setSelectedRowIds(new Set())
-        setActionError(null)
-        setActionSuccess(null)
-        setEditingRowIds(new Set())
-        setEditValues({})
+        setActionError(null); setActionSuccess(null)
+        setEditingRowIds(new Set()); setEditValues({})
     }
 
     const handleToggleRow = (rowId) => {
@@ -235,10 +215,10 @@ export default function DashboardPage() {
             await postBulkAction({ rows: targetRows, action, editValues })
 
             const actedIds = new Set(targetRows.map(r => r.id))
-            setAllRows(prev         => prev.filter(r => !actedIds.has(r.id)))
-            setSelectedRowIds(prev  => { const n = new Set(prev); actedIds.forEach(id => n.delete(id)); return n })
-            setEditValues(prev      => { const n = { ...prev };   actedIds.forEach(id => delete n[id]); return n })
-            setEditingRowIds(prev   => { const n = new Set(prev); actedIds.forEach(id => n.delete(id)); return n })
+            setAllRows(prev        => prev.filter(r => !actedIds.has(r.id)))
+            setSelectedRowIds(prev => { const n = new Set(prev); actedIds.forEach(id => n.delete(id)); return n })
+            setEditValues(prev     => { const n = { ...prev };   actedIds.forEach(id => delete n[id]); return n })
+            setEditingRowIds(prev  => { const n = new Set(prev); actedIds.forEach(id => n.delete(id)); return n })
 
             setActionSuccess(
                 `${targetRows.length} row${targetRows.length > 1 ? 's' : ''} approved successfully.`
@@ -272,7 +252,6 @@ export default function DashboardPage() {
                 vhModal={vhModal}
                 vhOptions={vhOptions}
                 onOpenVh={openVh}
-                onVhSelect={handleVhSelect}
                 onVhCancel={handleVhCancel}
                 selectedCount={selectedCount}
                 canAct={canAct}

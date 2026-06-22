@@ -51,7 +51,6 @@ function mapSapResponse(results) {
                 dateLines: {},
             })
         }
-
         const date = parseSapDate(item.Edatu)
         // Skip lines with invalid/zero dates entirely
         if (!date) return
@@ -77,14 +76,23 @@ function mapSapResponse(results) {
     return { dateColumns, rows }
 }
 
-export async function fetchDashboard({ customerCode, materialDescription, vbeln, matnr, werks } = {}) {
-    if (!customerCode?.trim()) throw new Error('Customer code is required')
+export async function fetchDashboard({ customerCode = [], vbeln = [], matnr = [], werks = [] } = {}) {
+    if (!customerCode.length) throw new Error('Customer code is required')
 
-    const filters = [`Kunnr eq '${customerCode.trim()}'`]
-    if (materialDescription?.trim()) filters.push(`substringof('${materialDescription.trim()}',Postx)`)
-    if (vbeln?.trim())               filters.push(`Vbeln eq '${vbeln.trim()}'`)
-    if (matnr?.trim())               filters.push(`Matnr eq '${matnr.trim()}'`)
-    if (werks?.trim())               filters.push(`Werks eq '${werks.trim()}'`)
+    const orGroup = (field, values) => {
+        if (!values.length) return null
+        if (values.length === 1) return `${field} eq '${values[0]}'`
+        return `(${values.map(v => `${field} eq '${v}'`).join(' or ')})`
+    }
+
+    const filters = []
+    filters.push(orGroup('Kunnr', customerCode))
+    const vbelnGroup = orGroup('Vbeln', vbeln)
+    if (vbelnGroup) filters.push(vbelnGroup)
+    const matnrGroup = orGroup('Matnr', matnr)
+    if (matnrGroup) filters.push(matnrGroup)
+    const werksGroup = orGroup('Werks', werks)
+    if (werksGroup) filters.push(werksGroup)
     filters.push(`type eq 'B'`)
 
     const url = `${SRV}/itemSet?$filter=${encodeURIComponent(filters.join(' and '))}&$format=json`

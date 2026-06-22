@@ -46,7 +46,7 @@ if (err.response?.status === 403) {
           You are not authorized to access this application.
         </p>
         <p style="font-size:14px;color:#666;margin-bottom:20px;">
-          Redirecting to login page in 3 seconds...
+          Redirecting to login page...
         </p>
       </div>
     </div>
