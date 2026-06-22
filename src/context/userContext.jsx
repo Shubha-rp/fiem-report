@@ -38,6 +38,7 @@ export function UserProvider({ children }) {
 
         // Authorization is already handled in server.js
         setAuthorized(true);
+        sessionStorage.removeItem('auto_reloaded');   
       })
       .catch((err) => {
         console.error(
